@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+
+    <title>老程-Canvas-淡入淡出</title>
+    <style type="text/css">
+        .out-div {
+            text-align: center;
+            padding-top: 30px;
+        }
+
+        #player {
+            border: 1px solid black;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="out-div">
+        <canvas id="player" width="400" height="400">Your browser does not support the HTML5 canvas tag.</canvas>
+    </div>
+    <script>
+        //图片数组
+        var imgList = ["https://img.alicdn.com/bao/uploaded/i2/813529278/O1CN01Civq0P2IPNCmhRuKS_!!0-item_pic.jpg",
+            "https://img.alicdn.com/bao/uploaded/i2/813529278/O1CN01iCxNOs2IPNCn4jyLf_!!0-item_pic.jpg",
+            "https://img.alicdn.com/bao/uploaded/i4/813529278/O1CN01WvBYgD2IPNCqyAEWE_!!0-item_pic.jpg",
+            "https://img.alicdn.com/bao/uploaded/i4/813529278/O1CN019jRGzx2IPNCqPBmjA_!!0-item_pic.jpg"
+        ];
+        // ["https://img.alicdn.com/bao/uploaded/i4/813529278/O1CN01jPqGzM2IPNHEAxkgi_!!0-item_pic.jpg",
+        //     "https://img.alicdn.com/bao/uploaded/i2/813529278/O1CN014hlfOr2IPNCoPdvtB_!!0-item_pic.jpg",
+        //     "https://img.alicdn.com/bao/uploaded/i1/813529278/O1CN01H8loJY2IPNCn4xXF9_!!0-item_pic.jpg",
+        //     "https://img.alicdn.com/bao/uploaded/i4/813529278/O1CN01dgDbap2IPNCoTQu4r_!!0-item_pic.jpg"
+        // ];
+
+
+        // drawImage(img,sx,sy,swidth,sheight,x,y,width,height)
+        // 参数	描述
+        // img	规定要使用的图像、画布或视频。
+        // sx	可选。开始剪切的 x 坐标位置。
+        // sy	可选。开始剪切的 y 坐标位置。
+        // swidth	可选。被剪切图像的宽度。
+        // sheight	可选。被剪切图像的高度。
+        // x	在画布上放置图像的 x 坐标位置。
+        // y	在画布上放置图像的 y 坐标位置。
+        // width	可选。要使用的图像的宽度。（伸展或缩小图像）
+        // height	可选。要使用的图像的高度。（伸展或缩小图像）
+        //-------------
+        // translate(x, y) x 是左右偏移量，y 是上下偏移量
+        // ctx.save(); //保存坐原点平移之前的状态
+        // ctx.restore(); //恢复到最初状态
+        // scale(x, y)  x,y 分别是横轴和纵轴的缩放因子
+        // arc(x, y, r, startAngle, endAngle, anticlockwise):
+        //  以(x, y) 为圆心，
+        //  以r 为半径，
+        //  从 startAngle 弧度开始到endAngle弧度结束。
+        //  anticlosewise 是布尔值，true 表示逆时针，false 表示顺时针(默认是顺时针)
+        //strokeRect(x, y, width, height)：绘制一个矩形的边框
+        // beginPath() 新建一条路径，路径一旦创建成功，图形绘制命令被指向到路径上生成路径
+
+
+
+        function fadeIn() {
+            var canvas = document.getElementById('player');
+            ctx = canvas.getContext('2d');
+            var width = canvas.width,
+                height = canvas.height;
+
+            function animation(img1, img2, callback) { //外方法
+                var alpha1 = 100,
+                    alpha2 = 0;
+                (function () { //内方法
+                    if (!alpha1) {
+                        return callback(); //回调外方法
+                    }
+                    let h1 = img1.height
+                    let w1 = img1.width
+                    let h2 = img2.height
+                    let w2 = img2.width
+                    //清空所有
+                    ctx.clearRect(0, 0, width, height);
+                    // 透明度
+                    ctx.globalAlpha = alpha1 / 100;
+                    alpha1 -= 2;
+                    let moveX = alpha1 > alpha2 ? 1 : -1
+                    ctx.translate(0.25 * moveX, 0);
+                    ctx.drawImage(img1, 0, 0, w1, h1, -2, 0, width, height);
+                    ctx.globalAlpha = alpha2 / 100;
+                    alpha2 += 2;
+                    ctx.drawImage(img2, 0, 0, w2, h2, -2, 0, width, height);
+                    setTimeout(arguments.callee, 40); //回调内方法
+                })();
+            }
+
+            var i = 0;
+            (function () {
+                animation(imgList[i], imgList[i += 1] || imgList[i = 0], arguments.callee);
+            })();
+        }
+
+        var imgLoaded = 0;
+        var onload = function () { //加载网络图片
+            imgLoaded++;
+            if (imgLoaded == imgList.length) {
+                fadeIn(); //全部加载完成调用动画
+            };
+        }
+        for (var i = imgList.length; i--;) {
+            var img = new Image(); // 创建一个<img>元素
+            img.addEventListener('load', onload)
+            img.src = imgList[i]; // 设置图片源地址
+            imgList[i] = img; //加载完成后数组直接存图片对象
+        }
+    </script>
+</body>
+
+</html>

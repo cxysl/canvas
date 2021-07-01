@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+
+    <title>老程-Canvas-40Test-Stop</title>
+    <style type="text/css">
+        .out-div {
+            text-align: center;
+            padding-top: 30px;
+        }
+
+        canvas {
+            border: 1px solid black;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="out-div">
+        <canvas id="player" width="400" height="400">Your browser does not support the HTML5 canvas tag.</canvas>
+    </div>
+    <script>
+        //图片数组
+        var imgList = ["https://img.alicdn.com/bao/uploaded/i2/813529278/O1CN01Civq0P2IPNCmhRuKS_!!0-item_pic.jpg",
+            "https://img.alicdn.com/bao/uploaded/i2/813529278/O1CN01iCxNOs2IPNCn4jyLf_!!0-item_pic.jpg",
+            "https://img.alicdn.com/bao/uploaded/i4/813529278/O1CN01WvBYgD2IPNCqyAEWE_!!0-item_pic.jpg",
+            "https://img.alicdn.com/bao/uploaded/i4/813529278/O1CN019jRGzx2IPNCqPBmjA_!!0-item_pic.jpg"
+        ];
+        //特效分析，动画分两段
+        // 1、前一张图片放大
+        // 2、第二张图片旋转放大进场（逆时针）
+        function rotate() {
+            var canvas = document.getElementById('player');
+            ctx = canvas.getContext('2d');
+            var width = canvas.width,
+                height = canvas.height;
+            var moveY = 1;
+
+            function animation(img1, img2, callback) { //外方法
+                moveY = -moveY
+                var enlarge = 1.0;
+                (function () { //内方法
+
+                    let h1 = img1.height
+                    let w1 = img1.width
+                    let h2 = img2.height
+                    let w2 = img2.width
+
+                    if (enlarge >= 1.1) { //第二部分动作：第二张图片进场 （从上往下/从下往上）
+                        var rotate = 0;
+                        var dot = {
+                            x: 100,
+                            y: 100
+                        };
+                        var elg = 0.5;
+                        (function () {
+                            if (rotate >= 360 - 14.4) {
+                                return callback(); //回调外方法
+                            }
+                            rotate += 3.6 * 4;
+                            dot.x -= 4;
+                            dot.y -= 4;
+                            elg += 0.02;
+                            ctx.clearRect(0, 0, width, height);
+                            ctx.drawImage(img1, 0, 0, w1, h1, 0, 0, width, height);
+                            ctx.save()
+                            let dotTemp = {
+                                x: dot.x + width * elg / 2,
+                                y: dot.y + height * elg / 2
+                            }
+                            ctx.translate(dotTemp.x, dotTemp.y);
+                            ctx.rotate(rotate * Math.PI / 180);
+                            ctx.translate(-dotTemp.x, -dotTemp.y);
+                            ctx.drawImage(img2, 0, 0, w2, h2, dot.x, dot.y, width * elg, height * elg)
+                            ctx.restore()
+                            setTimeout(arguments.callee, 40); //回调内方法
+                        })();
+
+                    } else { //第一部分动作：前一张图片放大
+                        ctx.save();
+                        ctx.scale(enlarge, enlarge);
+                        enlarge += 0.002
+                        ctx.drawImage(img1, 0, 0, w1, h1, -width * (enlarge - 1) / 2, -height * (enlarge - 1) / 2,
+                            width, height);
+                        ctx.restore();
+                        setTimeout(arguments.callee, 40); //回调内方法
+                    }
+                })();
+            }
+            var i = 0;
+            (function () {
+                animation(imgList[i], imgList[i += 1] || imgList[i = 0], arguments.callee);
+            })();
+        }
+
+        // windows.stop(){}
+
+        //--------------------------------------------------------------------------------------------------------------------------------------------
+        var imgLoaded = 0;
+        var onload = function () { //加载网络图片
+            imgLoaded++;
+            if (imgLoaded == imgList.length) {
+                rotate(); //全部加载完成调用动画
+            };
+        }
+        for (var i = imgList.length; i--;) {
+            var img = new Image(); // 创建一个<img>元素
+            img.addEventListener('load', onload)
+            img.src = imgList[i]; // 设置图片源地址
+            imgList[i] = img; //加载完成后数组直接存图片对象
+        }
+    </script>
+</body>
+
+</html>

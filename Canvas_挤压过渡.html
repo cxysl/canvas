@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+
+    <title>老程-Canvas-挤压过渡</title>
+    <style type="text/css">
+        .out-div {
+            text-align: center;
+            padding-top: 30px;
+        }
+
+        canvas {
+            border: 1px solid black;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="out-div">
+        <canvas id="player" width="400" height="400">Your browser does not support the HTML5 canvas tag.</canvas>
+    </div>
+    <script>
+        //图片数组
+        var imgList = ["https://img.alicdn.com/bao/uploaded/i2/813529278/O1CN01Civq0P2IPNCmhRuKS_!!0-item_pic.jpg",
+            "https://img.alicdn.com/bao/uploaded/i2/813529278/O1CN01iCxNOs2IPNCn4jyLf_!!0-item_pic.jpg",
+            "https://img.alicdn.com/bao/uploaded/i4/813529278/O1CN01WvBYgD2IPNCqyAEWE_!!0-item_pic.jpg",
+            "https://img.alicdn.com/bao/uploaded/i4/813529278/O1CN019jRGzx2IPNCqPBmjA_!!0-item_pic.jpg"
+        ];
+        //特效分析，动画分两段
+        // 1、前一张图片左右移动
+        // 2、第二张图片从中间进场，圆形遮罩
+        // 综上所述：循环体(前一张图片左右移动一段时间，第二章图片进场)
+        // strokeRect(x, y, width, height)
+        function pushOut() {
+            var canvas = document.getElementById('player');
+            let ctx = canvas.getContext('2d');
+            var width = canvas.width,
+                height = canvas.height;
+            var pushType = 1 //-1 上下; 1 左右;
+
+            function animation(img1, img2, callback) {
+                pushType = -pushType;
+                var move1 = 0;
+                // move2 = 0;
+                let h1 = img1.height
+                let w1 = img1.width
+                let h2 = img2.height
+                let w2 = img2.width;
+                (function () {
+                    if (move1 > 40) { //第二部分动作：第二张进场
+                        var x = width / 2,
+                            y = height / 2;
+                        (function () {
+                            if (pushType == -1) {
+                                if (y <= 0) {
+                                    return callback();
+                                }
+                                y -= 10;
+                                ctx.drawImage(img2, 0, 0, w1, h1, 0, y, width, height - 2 * y);
+                            } else {
+                                if (x <= 0) {
+                                    return callback();
+                                }
+                                x -= 10;
+                                ctx.drawImage(img2, 0, 0, w1, h1, x, 0, width - 2 * x, height);
+                            }
+                            setTimeout(arguments.callee, 20);
+                        })();
+                    } else { //第一部分动作：左右移动
+                        ctx.clearRect(0, 0, width, height);
+                        let step = 0
+                        if (move1 < 10) {
+                            step = move1
+                        } else if (move1 < 20) {
+                            step = 20 - move1
+                        } else if (move1 < 30) {
+                            step = 20 - move1
+                        } else if (move1 < 40) {
+                            step = -40 + move1
+                        }
+                        ctx.save()
+                        ctx.translate(0.5*step, 0);
+                        move1++;
+                        // move2++;
+                        ctx.drawImage(img1, 0, 0, w1, h1, 0, 0, width, height);
+                        ctx.restore()
+                        setTimeout(arguments.callee, 40);
+                    }
+                })();
+            }
+            var i = 0;
+            (function () {
+                animation(imgList[i], imgList[i += 1] || imgList[i = 0], arguments.callee);
+            })();
+        }
+
+
+        //--------------------------------------------------------------------------------------------------------------------------------------------
+        var imgLoaded = 0;
+        var onload = function () { //加载网络图片
+            imgLoaded++;
+            if (imgLoaded == imgList.length) {
+                pushOut(); //全部加载完成调用动画
+            };
+        }
+        for (var i = imgList.length; i--;) {
+            var img = new Image(); // 创建一个<img>元素
+            img.addEventListener('load', onload)
+            img.src = imgList[i]; // 设置图片源地址
+            imgList[i] = img; //加载完成后数组直接存图片对象
+        }
+    </script>
+</body>
+
+</html>

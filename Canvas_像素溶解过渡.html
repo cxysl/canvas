@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+
+    <title>老程-Canvas-像素溶解过渡</title>
+    <style type="text/css">
+        .out-div {
+            text-align: center;
+            padding-top: 30px;
+        }
+
+        canvas {
+            border: 1px solid black;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="out-div">
+        <canvas id="player" width="400" height="400">Your browser does not support the HTML5 canvas tag.</canvas>
+    </div>
+    <script>
+        //图片数组
+        var imgList = ["https://img.alicdn.com/bao/uploaded/i2/813529278/O1CN01Civq0P2IPNCmhRuKS_!!0-item_pic.jpg",
+            "https://img.alicdn.com/bao/uploaded/i2/813529278/O1CN01iCxNOs2IPNCn4jyLf_!!0-item_pic.jpg",
+            "https://img.alicdn.com/bao/uploaded/i4/813529278/O1CN01WvBYgD2IPNCqyAEWE_!!0-item_pic.jpg",
+            "https://img.alicdn.com/bao/uploaded/i4/813529278/O1CN019jRGzx2IPNCqPBmjA_!!0-item_pic.jpg"
+        ];
+
+        function leafWindow() {
+            var canvas = document.getElementById('player');
+            ctx = canvas.getContext('2d');
+            var width = canvas.width,
+                height = canvas.height;
+            var moveType = 1 //-1 左右; 1 上下;
+
+            function animation(img1, img2, callback) {
+                moveType = -moveType;
+                var move1 = 50,
+                    move2 = 0;
+                (function () {
+                    let h1 = img1.height
+                    let w1 = img1.width
+                    let h2 = img2.height
+                    let w2 = img2.width
+                    if (!move1) { //第二部分动作：第二张进场
+                        var numX = 20;
+                        var numY = 20;
+                        var num = 20;
+                        var maxH = height / num;
+                        var maxW = width / num;
+                        var ratio = w2 / width
+                        ctx.clearRect(0, 0, width, height);
+                        ctx.drawImage(img1, 0, 0, w1, h1, 0, 0, width, height);
+                        var indexNow = 0;
+                        var imgArr = [];
+                        step = 20;
+                        for (let i = 0; i < num; i++) {
+                            for (let j = 0; j < num; j++) {
+                                let obj = {}
+                                obj.sx = ratio * maxW * i;
+                                obj.sy = ratio * maxH * j;
+                                obj.swidth = ratio * maxW;
+                                obj.sheight = ratio * maxH;
+
+                                obj.x = maxW * i;
+                                obj.y = maxH * j;
+                                obj.width = maxW;
+                                obj.height = maxH;
+                                imgArr.push(obj)
+                            }
+                        }
+                        imgArr.sort(function () {
+                            return (0.5 - Math.random());
+                        });
+                        (function () {
+                            if (indexNow >= imgArr.length) {
+                                return callback();
+                            }
+                            for (let i = 0; i < step; i++) {
+                                let obj = imgArr[i + indexNow]
+                                ctx.drawImage(img2, obj.sx, obj.sy, obj.swidth, obj.sheight, obj.x, obj.y, obj
+                                    .width, obj.height);
+                            }
+                            indexNow += step;
+                            setTimeout(arguments.callee, 40); //回调内二方法
+                        })();
+                    } else { //第一部分动作：左右/上下移动
+                        ctx.clearRect(0, 0, width, height);
+                        let moveX = move1 > move2 ? 1 : -1
+                        move1--;
+                        move2++;
+                        if (moveType == -1) {
+                            ctx.translate(0.5 * moveX, 0);
+                            ctx.drawImage(img1, 0, 0, w1, h1, -2, 0, width, height);
+                        } else {
+                            ctx.translate(0, 0.5 * moveX);
+                            ctx.drawImage(img1, 0, 0, w1, h1, 0, -2, width, height);
+                        }
+                        setTimeout(arguments.callee, 40); //回调内方法
+                    }
+                })();
+            }
+            var i = 0;
+            (function () {
+                animation(imgList[i], imgList[i += 1] || imgList[i = 0], arguments.callee);
+            })();
+        }
+
+        const chunks = new Set() // 先准备个容器保存canvas来的图像流
+        let videoUrl = null
+        let mediaRecord = null
+
+        function createRecord() {
+            const mediaStream = document.querySelector('canvas').captureStream(48) // 获取画布canvasElement并设置帧频率(FPS)
+            mediaRecord = new MediaRecorder(mediaStream, { // 核心API，可以录制canvas, audio, video代码下方提供文档链接
+                videoBitsPerSecond: 8500000
+            })
+            mediaRecord.ondataavailable = (e) => { // 接收数据
+                chunks.add(e.data)
+            }
+            mediaRecord.start(100) // 开始录屏,参数为抓取间隔100毫秒
+        }
+
+        function download() { // 录制结束时调用该方法停止录制，并生成下载链接，下载
+            mediaRecord.stop() // 结束录屏
+            const videoBlob = new Blob(chunks, {
+                'type': 'video/mp4'
+            }) // 创建视频文件
+            videoUrl = window.URL.createObjectURL(videoBlob) // 创建对象链接
+            var a = document.createElement('a')
+            a.href = videoUrl
+            a.download = 'record-canvas.mp4'
+            a.style.display = 'none'
+            document.body.appendChild(a)
+            a.click()
+        }
+        setTimeout(() => {
+            download()
+        }, 20000)
+
+
+        //--------------------------------------------------------------------------------------------------------------------------------------------
+        var imgLoaded = 0;
+        var onload = function () { //加载网络图片
+            imgLoaded++;
+            if (imgLoaded == imgList.length) {
+                leafWindow(); //全部加载完成调用动画
+                createRecord() // 开始录制时调用该方法
+            };
+        }
+        for (var i = imgList.length; i--;) {
+            var img = new Image(); // 创建一个<img>元素
+            img.addEventListener('load', onload)
+            img.src = imgList[i]; // 设置图片源地址
+            imgList[i] = img; //加载完成后数组直接存图片对象
+        }
+    </script>
+</body>
+
+</html>
