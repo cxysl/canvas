@@ -1,21 +1,22 @@
 <template>
   <div class="player-wrap">
-    <!--
-      :width="canvasWidth"
-        :style="mode == 2 ? 'margin-left:50px' : ''" -->
-    <canvas
-      id="player"
-      :width="canvasWidth"
-      :style="mode == 2 ? 'margin-left:50px' : ''"
-      height="400"
-    >
+    <canvas id="player" :width="canvasWidth" height="400">
       Your browser does not support the HTML5 canvas tag.
     </canvas>
+    <!-- <video
+      style="border: 1px solid black;margin-left:100px;"
+      :width="canvasWidth"
+      height="400"
+      controls="true"
+      autoplay="true"
+      id="video-mp4"
+    ></video> -->
   </div>
 </template>
+
 <script>
-import { createNamespacedHelpers } from 'vuex'
-const { mapState } = createNamespacedHelpers('video')
+// import FFmpeg from '@ffmpeg/ffmpeg'
+import axios from 'axios'
 export default {
   name: 'videoCanvas',
   props: {
@@ -23,36 +24,34 @@ export default {
       type: String,
       default: '-1'
     },
+    musicUrl: {
+      type: String,
+      default: ''
+    },
     videoStyle: {
       type: Number,
       default: 1
     },
-    isPlaying: {
-      type: Boolean,
-      default: false
+    videoId: {
+      type: Number,
+      default: 1
+    },
+    videoNick: {
+      type: String,
+      default: ''
     },
     images: {
       type: Array,
       default() {
         return []
       }
+    },
+    isDaily: {
+      type: Boolean,
+      default: false
     }
   },
-  watch: {
-    images() {
-      this.loadImg()
-    },
-    videoStyle() {
-      this.specialCanvas()
-    },
-    isPlaying(newVal, oldVal) {
-      if ((newVal && (this.isStart || this.isProcess)) || this.isEnd) {
-        this.specialCanvas()
-      } else if (oldVal && this.isProcess) {
-        this.isHold = true
-      }
-    }
-  },
+  watch: {},
 
   data() {
     return {
@@ -61,18 +60,15 @@ export default {
       height: 0,
       imgList: [],
       imgLoaded: 0,
-      specialType: 1,
-      isInit: true,
-      isStart: true,
-      isEnd: false,
-      isProcess: false,
-      isHold: false
+      specialType: 1
     }
   },
   computed: {
-    ...mapState(['stateIndex1', 'nowState']),
     canvasWidth() {
-      return this.mode == 1 ? 400 : this.mode == 2 ? 300 : 400
+      return this.mode == '1' ? 400 : this.mode == '2' ? 300 : 400
+    },
+    videoDuration() {
+      return this.images.length * (2.25 + 0.03)
     }
   },
   created() {},
@@ -88,6 +84,7 @@ export default {
       this.imgList = []
       for (var i = this.images.length; i--; ) {
         var img = new Image()
+        img.crossOrigin = 'Anonymous'
         img.addEventListener('load', () => {
           onload()
         })
@@ -102,52 +99,124 @@ export default {
         }
       }
     },
+    getVideo() {
+      console.log('获取视频')
+      const stream = document.querySelector('canvas').captureStream()
+      const recorder = new MediaRecorder(stream, {
+        mimeType: 'video/webm',
+        videoBitsPerSecond: 2 * 1024 * 1024
+      })
+
+      const data = []
+      recorder.ondataavailable = function(event) {
+        if (event.data && event.data.size) {
+          data.push(event.data)
+        }
+      }
+      recorder.onstop = () => {
+        // console.log('结束录制')
+        //直接下载
+        let aTemp = document.createElement('a')
+        aTemp.href = URL.createObjectURL(
+          new Blob(data, {
+            type: 'video/mp4'
+          })
+        )
+        let name = new Date().getTime()
+        aTemp.download = '40TestVideo-JS' + name + '.mp4'
+        aTemp.click()
+
+        // dom 显示
+        // let video = document.querySelector('#video-mp4')
+        // video.src = URL.createObjectURL(
+        //   new Blob(data, {
+        //     type: 'video/mp4'
+        //   })
+        // )
+        this.sendVideoToServer(data)
+      }
+      recorder.start()
+      setTimeout(() => {
+        recorder.stop()
+      }, (this.videoDuration + 2) * 1000)
+    },
+    sendVideoToServer(data) {
+      console.log('data', data)
+      let formData = new FormData()
+      let videoName = new Date().getTime() + '.mp4'
+      let file = new window.File(data, videoName, {
+        type: 'video/mp4'
+      })
+      formData.append('files', file)
+      axios.defaults.headers = {
+        'Content-Type': 'application/json;charset=UTF-8'
+      }
+      axios.defaults.timeout = 5000
+      let baseUrl =
+        '//ffmpeg-api.baobeituan.com:8080/bbt-video-cloud/BbtVideoCloudService/convertAndUploadVideo.post'
+      console.log('this.isDaily', this.isDaily)
+      if (this.isDaily == true) {
+        baseUrl =
+          '//120.78.152.235:7031/bbt-video-cloud/BbtVideoCloudService/convertAndUploadVideo.post'
+      }
+      let num = (parseFloat(this.images.length * 2.3).toFixed(1) + '').split(
+        '.'
+      )
+      let str =
+        '00:00:' +
+        (num[0].length == 1 ? '0' + num[0] : num[0]) +
+        '.' +
+        num[1] * 100
+      console.log('lenght:', this.images.length, '  str:', str)
+      // let dataTemp = new Date()
+      // let timeTemp = `${dataTemp.getHours()}:${dataTemp.getMinutes()}:${dataTemp.getSeconds()}`
+      // let loggerStr = `请求时间：${timeTemp};`
+      axios
+        .post(
+          baseUrl +
+            '?musicUrl=' +
+            // 'client/template/video/convertAndUpload.post?musicUrl=' +
+            this.musicUrl +
+            '&id=' +
+            this.videoId +
+            '&nick=' +
+            this.videoNick +
+            '&cutTime=' +
+            str,
+          formData
+        )
+        .then(res => {
+          // loggerStr += `请求成功，res:${res}`
+          try {
+            if (res.data && res.status == 1) {
+              console.log(res)
+            }
+          } catch (error) {
+            console.error('BBT异常捕获', error)
+          }
+        })
+        .catch(err => {
+          // loggerStr += `请求失败，err:${err}`
+          console.error('错误，', err)
+        })
+      // setTimeout(() => {
+      // let a = document.createElement('a')
+      // a.href = 'data:text/paint; utf-8,' + loggerStr
+      // a.click()
+      // }, 5500)
+    },
+
     async specialCanvas() {
       let canvas = document.getElementById('player')
       this.ctx = canvas.getContext('2d')
       this.width = canvas.width
       this.height = canvas.height
       this.ctx.clearRect(0, 0, this.width, this.height)
-      if (this.isInit || this.isEnd) {
-        //初始化：渲染一张背景图到动画框
-        let img = this.imgList[0]
-        let imgInfo = this.getImgInfo(img.width, img.height)
-        this.ctx.drawImage(
-          img,
-          imgInfo.sx,
-          imgInfo.sy,
-          imgInfo.swidth,
-          imgInfo.sheight,
-          0,
-          0,
-          this.width,
-          this.height
-        )
-        if (!this.isInit) {
-          this.isEnd = false
-          this.isStart = true
-        }
-        this.isInit = false
-        return
-      }
-      this.isStart = false
       this.specialType = 1
       let maxLenght = this.imgList.length
       let startTime = new Date()
-      let stateIndexTemp = this.isHold ? this.stateIndex1 : 0
-      for (let index1 = stateIndexTemp || 0; index1 < maxLenght; index1++) {
-        if (!this.isPlaying && this.isProcess) {
-          console.log('for循环,index1:', index1 - 1)
-          console.log('this.isProcess', this.isProcess)
-          this.$store.commit({
-            //存当前画到了第几张图片
-            type: 'video/setStateIndex1',
-            stateIndex1: index1 - 1
-          })
-          return
-        }
-        this.isProcess = true
-        this.$emit('is-play')
+      this.getVideo()
+      for (let index1 = 0; index1 < maxLenght; index1++) {
         let indexTemp = index1
         let indexTemp2 = index1 + 1
         if (index1 == maxLenght - 1) {
@@ -174,16 +243,19 @@ export default {
         } else if (this.videoStyle == 10) {
           await this.flyIn(indexTemp, indexTemp2) //两侧飞入
         }
-        if (!this.isPlaying && index1 == maxLenght - 1) {
-          console.log('?for循环,index1:', maxLenght - 1)
-          this.$store.commit({
-            //存当前画到了第几张图片
-            type: 'video/setStateIndex1',
-            stateIndex1: maxLenght - 1
-          })
-          return
-        }
       }
+      // let imgTemp = this.imgList[0]
+      // this.ctx.drawImage(
+      //   imgTemp,
+      //   0,
+      //   0,
+      //   imgTemp.width,
+      //   imgTemp.height,
+      //   0,
+      //   0,
+      //   this.width,
+      //   this.height
+      // )
       let endTime = new Date()
       let mm = endTime.getTime() - startTime.getTime()
       console.log(
@@ -196,13 +268,8 @@ export default {
         '理论规定时间：',
         2.25 * this.imgList.length
       )
-      this.isEnd = true
-      let audio = document.getElementById('canvas-music')
-      audio.pause()
-      audio.currentTime = 0
-      this.isProcess = false
-      this.$emit('update:isPlaying', false)
     },
+
     getStep(move1, type) {
       if (type == 'new') {
         // 新方案 0 -> 20 / 0 -> -20
@@ -245,6 +312,7 @@ export default {
         return step
       }
     },
+
     // drawImage(img,sx,sy,swidth,sheight,x,y,width,height)
     //计算截取不同图片的区域坐标;  铺满、不放大、取中间区域
     getImgInfo(w, h) {
@@ -284,66 +352,31 @@ export default {
     upEnlarge(index1, index2) {
       let that = this
       // eslint-disable-next-line no-unused-vars
+      let mode = that.mode
+      // eslint-disable-next-line no-unused-vars
       return new Promise(function(res, rej) {
         ;(function out(img1, img2) {
           let h1 = img1.height
           let w1 = img1.width
           let h2 = img2.height
           let w2 = img2.width
+          let width = that.width
+          let height = that.height
           let imgInfo1 = that.getImgInfo(w1, h1)
           let imgInfo2 = that.getImgInfo(w2, h2)
-          // that.specialType = -that.specialType
-          // let enlarge = 1.0
-          let firstIn = true
-          that.specialType =
-            that.isHold && firstIn
-              ? that.nowState.specialType || that.specialType
-              : -that.specialType
-          let enlarge =
-            that.isHold && firstIn ? that.nowState.enlarge || 1.0 : 1.0
-          firstIn = false
-          that.ctx.clearRect(0, 0, that.width, that.height)
+          that.specialType = -that.specialType
+          let enlarge = 1.0
+          that.ctx.clearRect(0, 0, width, height)
           ;(function one() {
-            if (!that.isPlaying) {
-              console.log('暂停 上下放大 第一阶段动画')
-              let nowStateTemp = {}
-              nowStateTemp.enlarge = enlarge - 0.0025
-              nowStateTemp.specialType = that.specialType
-              that.$store.commit({
-                //存当前画到了第几张图片
-                type: 'video/setNowState',
-                nowState: nowStateTemp
-              })
-              res()
-              return
-            }
             if (enlarge >= 1.1) {
               //第二部分动作
-              // let h0 = 0
-              let firstInTwo = true
-              let h0 = that.isHold && firstInTwo ? that.nowState.h0 || 0 : 0
-              that.isHold = false
-              firstInTwo = false
+              let h0 = 0
               ;(function two() {
-                if (!that.isPlaying) {
-                  console.log('暂停 上下放大 第二阶段动画')
-                  let nowStateTemp = {}
-                  nowStateTemp.enlarge = enlarge
-                  nowStateTemp.specialType = that.specialType
-                  nowStateTemp.h0 = h0 - 25
-                  that.$store.commit({
-                    //存当前画到了第几张图片
-                    type: 'video/setNowState',
-                    nowState: nowStateTemp
-                  })
+                if (h0 > height) {
                   res()
                   return
                 }
-                if (h0 > that.height) {
-                  res()
-                  return
-                }
-                that.ctx.clearRect(0, 0, that.width, that.height)
+                that.ctx.clearRect(0, 0, width, height)
                 that.ctx.drawImage(
                   img1,
                   imgInfo1.sx,
@@ -352,8 +385,8 @@ export default {
                   imgInfo1.sheight,
                   0,
                   0,
-                  that.width,
-                  that.height
+                  width,
+                  height
                 )
                 let y = 0
                 if (that.specialType == 1) {
@@ -373,8 +406,8 @@ export default {
                   imgInfo2.sheight,
                   0,
                   y,
-                  that.width,
-                  that.height
+                  width,
+                  height
                 )
                 that.twoTimeOut = setTimeout(() => {
                   two()
@@ -391,10 +424,10 @@ export default {
                 imgInfo1.sy,
                 imgInfo1.swidth,
                 imgInfo1.sheight,
-                (-that.width * (enlarge - 1)) / 2,
-                (-that.height * (enlarge - 1)) / 2,
-                that.width,
-                that.height
+                (-width * (enlarge - 1)) / 2,
+                (-height * (enlarge - 1)) / 2,
+                width,
+                height
               )
               that.ctx.restore()
               that.oneTimeOut = setTimeout(() => {
@@ -417,56 +450,16 @@ export default {
           let w2 = img2.width
           let imgInfo1 = that.getImgInfo(w1, h1)
           let imgInfo2 = that.getImgInfo(w2, h2)
-          // let alpha1 = 100,
-          //   alpha2 = 0
-          // let move1 = 40,
-          let firstIn = true
-          let alpha1 =
-            that.isHold && firstIn ? that.nowState.alpha1 || 100 : 100
-          let alpha2 = that.isHold && firstIn ? that.nowState.alpha2 || 0 : 0
-          let move1 = that.isHold && firstIn ? that.nowState.move1 || 0 : 0
-          that.specialType =
-            that.isHold && firstIn
-              ? that.nowState.specialType || that.specialType
-              : -that.specialType
-          firstIn = false
+          let alpha1 = 100,
+            alpha2 = 0
+          let move1 = 0
+          that.specialType = -that.specialType
           that.ctx.clearRect(0, 0, that.width, that.height)
           ;(function one() {
-            if (!that.isPlaying) {
-              console.log('暂停 淡入淡出 第一阶段动画')
-              let nowStateTemp = {}
-              nowStateTemp.alpha1 = alpha1
-              nowStateTemp.alpha2 = alpha2
-              nowStateTemp.move1 = move1 + 1.25
-              nowStateTemp.specialType = that.specialType
-              that.$store.commit({
-                //存当前画到了第几张图片
-                type: 'video/setNowState',
-                nowState: nowStateTemp
-              })
-              res()
-              return
-            }
             if (move1 >= 20) {
               //第二部分动作
-              that.isHold = false
               that.ctx.clearRect(0, 0, that.width, that.height)
               ;(function two() {
-                if (!that.isPlaying) {
-                  console.log('暂停 淡入淡出 第二阶段动画')
-                  let nowStateTemp = {}
-                  nowStateTemp.alpha1 = alpha1
-                  nowStateTemp.alpha2 = alpha2
-                  nowStateTemp.move1 = move1
-                  nowStateTemp.specialType = that.specialType
-                  that.$store.commit({
-                    //存当前画到了第几张图片
-                    type: 'video/setNowState',
-                    nowState: nowStateTemp
-                  })
-                  res()
-                  return
-                }
                 if (alpha1 <= 0) {
                   res()
                   return
@@ -509,7 +502,6 @@ export default {
               let step = that.getStep(move1, 'v2')
               that.ctx.translate(step * that.specialType, 0)
               move1 += 0.5
-              //0.25
               that.ctx.drawImage(
                 img1,
                 imgInfo1.sx,
@@ -542,30 +534,10 @@ export default {
           let w2 = img2.width
           let imgInfo1 = that.getImgInfo(w1, h1)
           let imgInfo2 = that.getImgInfo(w2, h2)
-          // that.specialType = -that.specialType //-1 上下; 1 左右;
-          // let move1 = 40;
-          let firstIn = true
-          that.specialType =
-            that.isHold && firstIn
-              ? that.nowState.specialType || that.specialType
-              : -that.specialType
-          let move1 = that.isHold && firstIn ? that.nowState.move1 || 0 : 0
-          firstIn = false
+          that.specialType = -that.specialType //-1 上下; 1 左右;
+          let move1 = 0
           that.ctx.clearRect(0, 0, that.width, that.height)
           ;(function one() {
-            if (!that.isPlaying) {
-              console.log('暂停 多形状过渡 第一阶段动画')
-              let nowStateTemp = {}
-              nowStateTemp.move1 = move1
-              nowStateTemp.specialType = that.specialType
-              that.$store.commit({
-                //存当前画到了第几张图片
-                type: 'video/setNowState',
-                nowState: nowStateTemp
-              })
-              res()
-              return
-            }
             if (move1 >= 20) {
               //第二部分动作
               that.ctx.clearRect(0, 0, that.width, that.height)
@@ -580,40 +552,12 @@ export default {
                 that.width,
                 that.height
               )
-              // let r = 0 //半径
-              // let x = 200,
-              //   y = 200,
-              //   w = 0,
-              //   h = 0
-              let firstInTwo = true
-              let xTemp = that.mode == 2 ? 150 : 200
-              let r = that.isHold && firstInTwo ? that.nowState.r || 0 : 0
-              let x =
-                that.isHold && firstInTwo ? that.nowState.x || xTemp : xTemp
-              let y = that.isHold && firstInTwo ? that.nowState.y || 200 : 200
-              let w = that.isHold && firstInTwo ? that.nowState.w || 0 : 0
-              let h = that.isHold && firstInTwo ? that.nowState.h || 0 : 0
-              that.isHold = false
-              firstInTwo = false
+              let r = 0 //半径
+              let x = that.mode == 2 ? 150 : 200,
+                y = 200,
+                w = 0,
+                h = 0
               ;(function two() {
-                if (!that.isPlaying) {
-                  console.log('暂停 多形状过渡 第二阶段动画')
-                  let nowStateTemp = {}
-                  nowStateTemp.move1 = move1
-                  nowStateTemp.specialType = that.specialType
-                  nowStateTemp.r = r
-                  nowStateTemp.x = x
-                  nowStateTemp.y = y
-                  nowStateTemp.w = w
-                  nowStateTemp.h = h
-                  that.$store.commit({
-                    //存当前画到了第几张图片
-                    type: 'video/setNowState',
-                    nowState: nowStateTemp
-                  })
-                  res()
-                  return
-                }
                 if (that.specialType == -1) {
                   if (r >= 200 * Math.sqrt(2)) {
                     res()
@@ -719,31 +663,10 @@ export default {
           let w2 = img2.width
           let imgInfo1 = that.getImgInfo(w1, h1)
           let imgInfo2 = that.getImgInfo(w2, h2)
-          // that.specialType = -that.specialType //-1 上下; 1 左右;
-          // let move1 = 40,
-          //   move2 = 0
-          let firstIn = true
-          that.specialType =
-            that.isHold && firstIn
-              ? that.nowState.specialType || that.specialType
-              : -that.specialType
-          let move1 = that.isHold && firstIn ? that.nowState.move1 || 0 : 0
-          firstIn = false
+          that.specialType = -that.specialType //-1 上下; 1 左右;
+          let move1 = 0
           that.ctx.clearRect(0, 0, that.width, that.height)
           ;(function one() {
-            if (!that.isPlaying) {
-              console.log('暂停 像素溶解过渡 第一阶段动画')
-              let nowStateTemp = {}
-              nowStateTemp.move1 = move1
-              nowStateTemp.specialType = that.specialType
-              that.$store.commit({
-                //存当前画到了第几张图片
-                type: 'video/setNowState',
-                nowState: nowStateTemp
-              })
-              res()
-              return
-            }
             if (move1 >= 20) {
               //第二部分动作
               // let numX = 20
@@ -765,12 +688,7 @@ export default {
                 that.width,
                 that.height
               )
-              // let indexNow = 0
-              let firstInTwo = true
-              let indexNow =
-                that.isHold && firstInTwo ? that.nowState.indexNow || 0 : 0
-              that.isHold = false
-              firstInTwo = false
+              let indexNow = 0
 
               let imgArr = []
               let step = 40
@@ -793,20 +711,6 @@ export default {
                 return 0.5 - Math.random()
               })
               ;(function two() {
-                if (!that.isPlaying) {
-                  console.log('暂停 像素溶解过渡 第二阶段动画')
-                  let nowStateTemp = {}
-                  nowStateTemp.move1 = move1
-                  nowStateTemp.specialType = that.specialType
-                  nowStateTemp.indexNow = indexNow
-                  that.$store.commit({
-                    //存当前画到了第几张图片
-                    type: 'video/setNowState',
-                    nowState: nowStateTemp
-                  })
-                  res()
-                  return
-                }
                 if (indexNow >= imgArr.length) {
                   res()
                   return
@@ -831,36 +735,11 @@ export default {
                 }, 40)
               })()
             } else {
-              //第一部分动作
-              // that.ctx.clearRect(0, 0, that.width, that.height)
-              // that.ctx.drawImage(
-              //   img1,
-              //   0,
-              //   0,
-              //   w1,
-              //   h1,
-              //   0,
-              //   0,
-              //   that.width,
-              //   that.height
-              // )
               that.ctx.save()
               let step = that.getStep(move1, 'v2')
               step *= that.specialType
               move1 += 0.45
               if (that.specialType == -1) {
-                // that.ctx.drawImage(
-                //   img1,
-                //   0,
-                //   0,
-                //   (step * w1) / that.width,
-                //   h1,
-                //   0,
-                //   0,
-                //   step,
-                //   that.height
-                // )
-                // that.ctx.save()
                 that.ctx.translate(step, 0)
                 that.ctx.drawImage(
                   img1,
@@ -908,40 +787,14 @@ export default {
           let w2 = img2.width
           let imgInfo1 = that.getImgInfo(w1, h1)
           let imgInfo2 = that.getImgInfo(w2, h2)
-          // that.specialType = -that.specialType //-1 上下; 1 左右;
-          // let move1 = 40,
-          //   move2 = 0
-          let firstIn = true
-          that.specialType =
-            that.isHold && firstIn
-              ? that.nowState.specialType || that.specialType
-              : -that.specialType
-          let move1 = that.isHold && firstIn ? that.nowState.move1 || 0 : 0
-          firstIn = false
+          that.specialType = -that.specialType //-1 上下; 1 左右;
+          let move1 = 0
           that.ctx.clearRect(0, 0, that.width, that.height)
           ;(function one() {
-            if (!that.isPlaying) {
-              console.log('暂停 百叶窗 第一阶段动画')
-              let nowStateTemp = {}
-              nowStateTemp.move1 = move1
-              nowStateTemp.specialType = that.specialType
-              that.$store.commit({
-                //存当前画到了第几张图片
-                type: 'video/setNowState',
-                nowState: nowStateTemp
-              })
-              res()
-              return
-            }
             if (move1 >= 20) {
               let num = 20
-              // let objH = 0
-              // let objW = 0
-              let firstInTwo = true
-              let objH = that.isHold && firstInTwo ? that.nowState.objH || 0 : 0
-              let objW = that.isHold && firstInTwo ? that.nowState.objW || 0 : 0
-              that.isHold = false
-              firstInTwo = false
+              let objH = 0
+              let objW = 0
               let maxH = that.height / num
               let maxW = that.width / num
               that.ctx.clearRect(0, 0, that.width, that.height)
@@ -957,21 +810,6 @@ export default {
                 that.height
               )
               ;(function two() {
-                if (!that.isPlaying) {
-                  console.log('暂停 百叶窗 第二阶段动画')
-                  let nowStateTemp = {}
-                  nowStateTemp.move1 = move1
-                  nowStateTemp.specialType = that.specialType
-                  nowStateTemp.objH = objH
-                  nowStateTemp.objW = objW
-                  that.$store.commit({
-                    //存当前画到了第几张图片
-                    type: 'video/setNowState',
-                    nowState: nowStateTemp
-                  })
-                  res()
-                  return
-                }
                 if (that.specialType == -1) {
                   if (objH >= maxH) {
                     res()
@@ -1072,54 +910,18 @@ export default {
           let w2 = img2.width
           let imgInfo1 = that.getImgInfo(w1, h1)
           let imgInfo2 = that.getImgInfo(w2, h2)
-          // that.specialType = -that.specialType
-          // let enlarge = 1.0
-          let firstIn = true
-          that.specialType =
-            that.isHold && firstIn
-              ? that.nowState.specialType || that.specialType
-              : -that.specialType
-          let enlarge =
-            that.isHold && firstIn ? that.nowState.enlarge || 1.0 : 1.0
-          firstIn = false
+          that.specialType = -that.specialType
+          let enlarge = 1.0
           that.ctx.clearRect(0, 0, that.width, that.height)
           ;(function one() {
-            if (!that.isPlaying) {
-              console.log('暂停 旋转过渡 第一阶段动画')
-              let nowStateTemp = {}
-              nowStateTemp.enlarge = enlarge
-              nowStateTemp.specialType = that.specialType
-              that.$store.commit({
-                //存当前画到了第几张图片
-                type: 'video/setNowState',
-                nowState: nowStateTemp
-              })
-              res()
-              return
-            }
             if (enlarge >= 1.1) {
               //第二部分动作
-              // let rotate = 0
-              // let dot = {
-              //   x: 100,
-              //   y: 100
-              // }
-              // let elg = 0.5
-              let firstInTwo = true
-              let rotate =
-                that.isHold && firstInTwo ? that.nowState.rotate || 0 : 0
-              let dotTemp = {
+              let rotate = 0
+              let dot = {
                 x: 100,
                 y: 100
               }
-              let dot =
-                that.isHold && firstInTwo
-                  ? that.nowState.dot || dotTemp
-                  : dotTemp
-              let elg =
-                that.isHold && firstInTwo ? that.nowState.elg || 0.5 : 0.5
-              that.isHold = false
-              firstInTwo = false
+              let elg = 0.5
               that.ctx.clearRect(0, 0, that.width, that.height)
               that.ctx.drawImage(
                 img1,
@@ -1133,27 +935,11 @@ export default {
                 that.height
               )
               ;(function two() {
-                if (!that.isPlaying) {
-                  console.log('暂停 旋转过渡 第二阶段动画')
-                  let nowStateTemp = {}
-                  nowStateTemp.enlarge = enlarge
-                  nowStateTemp.specialType = that.specialType
-                  nowStateTemp.rotate = rotate
-                  nowStateTemp.dot = dot
-                  nowStateTemp.elg = elg
-                  that.$store.commit({
-                    //存当前画到了第几张图片
-                    type: 'video/setNowState',
-                    nowState: nowStateTemp
-                  })
+                if (rotate >= 360) {
                   res()
                   return
                 }
-                if (rotate >= 360 - 3.6 * 7) {
-                  res()
-                  return
-                }
-                rotate += 3.6 * 7
+                rotate += 24
                 dot.x -= 7
                 dot.y -= 7
                 elg += 0.035
@@ -1230,32 +1016,11 @@ export default {
           let w2 = img2.width
           let imgInfo1 = that.getImgInfo(w1, h1)
           let imgInfo2 = that.getImgInfo(w2, h2)
-          // that.specialType = -that.specialType
+          that.specialType = -that.specialType
           let step = 50
-          //   move1 = 40,
-          //   move2 = 0
-          let firstIn = true
-          that.specialType =
-            that.isHold && firstIn
-              ? that.nowState.specialType || that.specialType
-              : -that.specialType
-          let move1 = that.isHold && firstIn ? that.nowState.move1 || 0 : 0
-          firstIn = false
+          let move1 = 0
           that.ctx.clearRect(0, 0, that.width, that.height)
           ;(function one() {
-            if (!that.isPlaying) {
-              console.log('暂停 斜角过渡 第一阶段动画')
-              let nowStateTemp = {}
-              nowStateTemp.move1 = move1
-              nowStateTemp.specialType = that.specialType
-              that.$store.commit({
-                //存当前画到了第几张图片
-                type: 'video/setNowState',
-                nowState: nowStateTemp
-              })
-              res()
-              return
-            }
             if (move1 >= 20) {
               //第二部分动作
               that.ctx.clearRect(0, 0, that.width, that.height)
@@ -1270,67 +1035,23 @@ export default {
                 that.width,
                 that.height
               )
-              // let dot1 = {
-              //   x: 0,
-              //   y: 0
-              // }
-              // let dot2 = {
-              //   x: 0,
-              //   y: 0
-              // }
-              // let dot3 = {
-              //   x: 400,
-              //   y: 400
-              // }
-              // let dot4 = {
-              //   x: 400,
-              //   y: 400
-              // }
-              let dotTemp12 = {
+              let dot1 = {
                 x: 0,
                 y: 0
               }
-              let dotTemp34 = {
+              let dot2 = {
+                x: 0,
+                y: 0
+              }
+              let dot3 = {
                 x: 400,
                 y: 400
               }
-              let firstInTwo = true
-              let dot1 =
-                that.isHold && firstInTwo
-                  ? that.nowState.dot1 || dotTemp12
-                  : dotTemp12
-              let dot2 =
-                that.isHold && firstInTwo
-                  ? that.nowState.dot2 || dotTemp12
-                  : dotTemp12
-              let dot3 =
-                that.isHold && firstInTwo
-                  ? that.nowState.dot3 || dotTemp34
-                  : dotTemp34
-              let dot4 =
-                that.isHold && firstInTwo
-                  ? that.nowState.dot4 || dotTemp34
-                  : dotTemp34
-              that.isHold = false
-              firstInTwo = false
+              let dot4 = {
+                x: 400,
+                y: 400
+              }
               ;(function two() {
-                if (!that.isPlaying) {
-                  console.log('暂停 斜角过渡 第一阶段动画')
-                  let nowStateTemp = {}
-                  nowStateTemp.move1 = move1
-                  nowStateTemp.specialType = that.specialType
-                  nowStateTemp.dot1 = dot1
-                  nowStateTemp.dot2 = dot2
-                  nowStateTemp.dot3 = dot3
-                  nowStateTemp.dot4 = dot4
-                  that.$store.commit({
-                    //存当前画到了第几张图片
-                    type: 'video/setNowState',
-                    nowState: nowStateTemp
-                  })
-                  res()
-                  return
-                }
                 if (that.specialType == -1) {
                   if (dot1.y >= 400) {
                     res()
@@ -1460,62 +1181,15 @@ export default {
           let w2 = img2.width
           let imgInfo1 = that.getImgInfo(w1, h1)
           let imgInfo2 = that.getImgInfo(w2, h2)
-          // that.specialType = -that.specialType //-1 上下; 1 左右;
-          // let move1 = 45,
-          //   move2 = 0
-          let firstIn = true
-          that.specialType =
-            that.isHold && firstIn
-              ? that.nowState.specialType || that.specialType
-              : -that.specialType
-          let move1 = that.isHold && firstIn ? that.nowState.move1 || 0 : 0
-          firstIn = false
+          that.specialType = -that.specialType //-1 上下; 1 左右;
+          let move1 = 0
           that.ctx.clearRect(0, 0, that.width, that.height)
           ;(function one() {
-            if (!that.isPlaying) {
-              console.log('暂停 挤压过渡 第一阶段动画')
-              let nowStateTemp = {}
-              nowStateTemp.move1 = move1
-              nowStateTemp.specialType = that.specialType
-              that.$store.commit({
-                //存当前画到了第几张图片
-                type: 'video/setNowState',
-                nowState: nowStateTemp
-              })
-              res()
-              return
-            }
             if (move1 >= 20) {
               //第二部分动作：第二张进场
-              // let x = that.width / 2
-              // let y = that.height / 2
-              let firstInTwo = true
-              let x =
-                that.isHold && firstInTwo
-                  ? that.nowState.x || that.width / 2
-                  : that.width / 2
-              let y =
-                that.isHold && firstInTwo
-                  ? that.nowState.y || that.width / 2
-                  : that.width / 2
-              that.isHold = false
-              firstInTwo = false
+              let x = that.width / 2
+              let y = that.height / 2
               ;(function two() {
-                if (!that.isPlaying) {
-                  console.log('暂停 挤压过渡 第二阶段动画')
-                  let nowStateTemp = {}
-                  nowStateTemp.move1 = move1
-                  nowStateTemp.specialType = that.specialType
-                  nowStateTemp.x = x
-                  nowStateTemp.y = y
-                  that.$store.commit({
-                    //存当前画到了第几张图片
-                    type: 'video/setNowState',
-                    nowState: nowStateTemp
-                  })
-                  res()
-                  return
-                }
                 if (that.specialType == -1) {
                   if (y <= 0) {
                     // out(that.imgList[index1], that.imgList[index2])
@@ -1535,26 +1209,23 @@ export default {
                     that.height - 2 * y
                   )
                 } else {
-                  if (y <= 0) {
+                  if (x <= 0) {
                     res()
                     // out(that.imgList[index1], that.imgList[index2])
                     return
                   }
-                  x -= 23
-                  y -= 23
-                  if (x > 0) {
-                    that.ctx.drawImage(
-                      img2,
-                      imgInfo2.sx,
-                      imgInfo2.sy,
-                      imgInfo2.swidth,
-                      imgInfo2.sheight,
-                      x,
-                      0,
-                      that.width - 2 * x,
-                      that.height
-                    )
-                  }
+                  x -= that.mode == 2 ? 20 : 23
+                  that.ctx.drawImage(
+                    img2,
+                    imgInfo2.sx,
+                    imgInfo2.sy,
+                    imgInfo2.swidth,
+                    imgInfo2.sheight,
+                    x,
+                    0,
+                    that.width - 2 * x,
+                    that.height
+                  )
                 }
                 that.twoTimeOut = setTimeout(() => {
                   two()
@@ -1599,31 +1270,10 @@ export default {
           let w2 = img2.width
           let imgInfo1 = that.getImgInfo(w1, h1)
           let imgInfo2 = that.getImgInfo(w2, h2)
-          // that.specialType = -that.specialType
-          // let move1 = 40,
-          //   move2 = 0
-          let firstIn = true
-          that.specialType =
-            that.isHold && firstIn
-              ? that.nowState.specialType || that.specialType
-              : -that.specialType
-          let move1 = that.isHold && firstIn ? that.nowState.move1 || 0 : 0
-          firstIn = false
+          that.specialType = -that.specialType
+          let move1 = 0
           that.ctx.clearRect(0, 0, that.width, that.height)
           ;(function one() {
-            if (!that.isPlaying) {
-              console.log('暂停 直角过渡 第一阶段动画')
-              let nowStateTemp = {}
-              nowStateTemp.move1 = move1
-              nowStateTemp.specialType = that.specialType
-              that.$store.commit({
-                //存当前画到了第几张图片
-                type: 'video/setNowState',
-                nowState: nowStateTemp
-              })
-              res()
-              return
-            }
             if (move1 >= 20) {
               //第二部分动作
               that.ctx.clearRect(0, 0, that.width, that.height)
@@ -1638,38 +1288,11 @@ export default {
                 that.width,
                 that.height
               )
-              // let xw1 = 100,
-              //   xh1 = 0
-              // let xw2 = 300,
-              //   xh2 = 400
-              let firstInTwo = true
-              let xw1 =
-                that.isHold && firstInTwo ? that.nowState.xw1 || 100 : 100
-              let xh1 = that.isHold && firstInTwo ? that.nowState.xh1 || 0 : 0
-              let xw2 =
-                that.isHold && firstInTwo ? that.nowState.xw2 || 300 : 300
-              let xh2 =
-                that.isHold && firstInTwo ? that.nowState.xh2 || 400 : 400
-              that.isHold = false
-              firstInTwo = false
+              let xw1 = 100,
+                xh1 = 0
+              let xw2 = 300,
+                xh2 = 400
               ;(function two() {
-                if (!that.isPlaying) {
-                  console.log('暂停 直角过渡 第一阶段动画')
-                  let nowStateTemp = {}
-                  nowStateTemp.move1 = move1
-                  nowStateTemp.specialType = that.specialType
-                  nowStateTemp.xw1 = xw1
-                  nowStateTemp.xh1 = xh1
-                  nowStateTemp.xw2 = xw2
-                  nowStateTemp.xh2 = xh2
-                  that.$store.commit({
-                    //存当前画到了第几张图片
-                    type: 'video/setNowState',
-                    nowState: nowStateTemp
-                  })
-                  res()
-                  return
-                }
                 if (that.specialType == -1) {
                   if (xh1 >= 400) {
                     res()
@@ -1779,62 +1402,16 @@ export default {
           let w2 = img2.width
           let imgInfo1 = that.getImgInfo(w1, h1)
           let imgInfo2 = that.getImgInfo(w2, h2)
-          // that.specialType = -that.specialType
-          // let move1 = 45,
-          //   move2 = 0
-          let firstIn = true
-          that.specialType =
-            that.isHold && firstIn
-              ? that.nowState.specialType || that.specialType
-              : -that.specialType
-          let move1 = that.isHold && firstIn ? that.nowState.move1 || 0 : 0
-          firstIn = false
+          that.specialType = -that.specialType
+          let move1 = 0
           that.ctx.clearRect(0, 0, that.width, that.height)
           ;(function one() {
-            if (!that.isPlaying) {
-              console.log('暂停 上下放大 第一阶段动画')
-              let nowStateTemp = {}
-              nowStateTemp.move1 = move1
-              nowStateTemp.specialType = that.specialType
-              that.$store.commit({
-                //存当前画到了第几张图片
-                type: 'video/setNowState',
-                nowState: nowStateTemp
-              })
-              res()
-              return
-            }
             if (move1 >= 20) {
               //第二部分动作
-              // let rotate = 40
-              // let x0 = -300
-              // let y0 = -400
-              let firstInTwo = true
-              let rotate =
-                that.isHold && firstInTwo ? that.nowState.rotate || 40 : 40
-              let x0 =
-                that.isHold && firstInTwo ? that.nowState.x0 || -300 : -300
-              let y0 =
-                that.isHold && firstInTwo ? that.nowState.y0 || -400 : -400
-              that.isHold = false
-              firstInTwo = false
+              let rotate = 40
+              let x0 = -300
+              let y0 = -400
               ;(function two() {
-                if (!that.isPlaying) {
-                  console.log('暂停 上下放大 第二阶段动画')
-                  let nowStateTemp = {}
-                  nowStateTemp.move1 = move1
-                  nowStateTemp.specialType = that.specialType
-                  nowStateTemp.rotate = rotate
-                  nowStateTemp.x0 = x0
-                  nowStateTemp.y0 = y0
-                  that.$store.commit({
-                    //存当前画到了第几张图片
-                    type: 'video/setNowState',
-                    nowState: nowStateTemp
-                  })
-                  res()
-                  return
-                }
                 if (rotate <= 0) {
                   res()
                   return
@@ -1923,8 +1500,6 @@ export default {
 }
 </script>
 <style lang="scss">
-.player-wrap {
-  width: 400px;
-  height: 400px;
-}
+// .player-wrap {
+// }
 </style>
